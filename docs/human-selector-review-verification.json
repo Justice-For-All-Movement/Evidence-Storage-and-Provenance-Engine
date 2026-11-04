@@ -1,0 +1,42 @@
+{
+  "status": "PR8 qualification checkpoint; final documentation-head CI required",
+  "local": {
+    "focusedGroups": 2,
+    "typecheck": "passed",
+    "build": "passed",
+    "registry": "passed",
+    "fullSuite": "not claimed at this checkpoint"
+  },
+  "ci": {
+    "observedSource": "e5940deef4999a4633fa84f358f505e23274df8a",
+    "run": 41922589071,
+    "job": 126898605123,
+    "ordinaryTests": 75,
+    "installedServiceGroups": 33,
+    "declarations": "passed",
+    "moduleByteMatch": true,
+    "normalPrepareInstall": "passed",
+    "fail": 0,
+    "skipped": 0,
+    "rawLogs": "inspected both footers/final success marker",
+    "finalDocumentationHead": "required"
+  },
+  "review": [
+    "Shared owning lock/fresh authenticated directory/source bounds; actual human kind and exact ID",
+    "Legacy response equality and methods preserved; no fallback",
+    "Shared audit type is not profile authentication proof; lost read commit is unknown",
+    "No new SQL/pin/contracts/effect/endpoint; protected downstream reader adoption separate"
+  ],
+  "remaining": [
+    "Final documentation-head CI/branch rules",
+    "Knowledge explicit SDK upgrade/human review binding and current Identity/Consent before-after guards",
+    "Host proofing/mapping/delegation/clock/driver/CPUheap/bytes/scanner/TCP/browser/live qualification"
+  ],
+  "sourceSha256": {
+    "src/service.ts": "1a92f32c96482c134d5ae3492e511791ba9e171863a32c7080fcbf21facd77b1",
+    "tests/service.test.ts": "e9484b1b04c039f4861f6fb3694d54c8a611edaaa3ee274a66a00ac86015e8db",
+    "docs/HUMAN_SELECTOR_REVIEW.md": "8d7462df202573e8909e79d004e2d97659a073a8e39f62c4bcc242e503012ea4",
+    "docs/ARCHITECTURE.md": "45ae674dafa365e644cb328a5707cfa752adcd565942b64146aab1cbbbe3fa85",
+    "registry/prs.json": "6e9dc061bf9c39f1bb74060dca6921245a226419a9d9315a404a5e4d63e23804"
+  }
+}
