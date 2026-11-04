@@ -197,3 +197,93 @@ test('scan completion acknowledgement, attempt record and aggregate roll back to
  f.advance(1000);assert.equal((await f.service.runNextScan(f.req('worker2')))?.verdict,'clean');assert.equal(f.seen.length,2);
  assert.deepEqual(Buffer.from(await f.service.read(f.req(),acquired.ref)),Buffer.from(command().bytes));
 });
+
+test('owning selector review binds exact current metadata/representation and reports unknown family without exposing histories',async t=>{
+ const f=await setup(t);const a=await f.service.acquire(f.req(),command());
+ const scan=await f.service.runNextScan(f.req('worker'));const observed=await f.service.inspect(f.req(),a.ref);
+ const r=await f.service.representation(f.req(),a.ref,`representation:${digest({attemptId:scan!.attemptId})}`);
+ const whole={kind:'whole' as const,evidence:a.ref,sha256:observed.version.sha256};
+ const text={kind:'text' as const,evidence:a.ref,sha256:whole.sha256,representationId:r.id,representationDigest:r.digest,page:null,start:0,end:9,quote:'Extracted'};
+ const before=await f.rows('SELECT * FROM public.evidence_outbox');
+ const result=await f.service.reviewSelectors(f.req('viewer'),[whole,text]);
+ assert.equal(result.revision,observed.revision);assert.equal(result.purpose,'verify-fixture');assert.equal(result.selectors.length,2);
+ assert.equal(result.sources.uniqueByteCount,1);assert.equal(result.sources.sourceGroupCount,1);assert.equal(result.sources.independentFamilyCount,null);
+ assert.deepEqual(result.sources.unknownFamilyRefs,[a.ref]);assert.match(result.selectors[0]!.fingerprint,/^[a-f0-9]{64}$/);
+ assert.notEqual(result.selectors[0]!.fingerprint,result.selectors[1]!.fingerprint);
+ assert.equal('versions' in result,false);assert.equal('representations' in result,false);assert.equal('families' in result,false);
+ assert.equal(JSON.stringify(result).includes(f.tokens.viewer),false);
+ assert.deepEqual(await f.rows('SELECT * FROM public.evidence_outbox'),before);
+ assert.equal((await f.service.inspect(f.req(),a.ref)).revision,observed.revision);
+ Object.assign(result.selectors[0]!.selector.evidence,{id:'caller mutation'});
+ assert.equal((await f.service.reviewSelectors(f.req(),[whole])).selectors[0]!.selector.evidence.id,a.ref.id);
+});
+test('selector review fails closed on quarantine, scope, purpose, hash, quote and extra authority fields with checked-audit rollback',async t=>{
+ const f=await setup(t),a=await f.service.acquire(f.req(),command());
+ const version=(await f.service.inspect(f.req(),a.ref)).version;
+ const q={kind:'whole' as const,evidence:a.ref,sha256:version.sha256};
+ await assert.rejects(f.service.reviewSelectors(f.req(),[q]),code('evidence_quarantined'));
+ const scan=await f.service.runNextScan(f.req('worker'));const rep=await f.service.representation(f.req(),a.ref,`representation:${digest({attemptId:scan!.attemptId})}`);
+ const audits=async()=> (await scoped(f.db,f.ctx(),tx=>tx.audits())).filter(a=>a.type==='evidence.selectors.review_checked');
+ for(const run of [
+  ()=>f.service.reviewSelectors(f.req('foreign'),[q]),
+  ()=>f.service.reviewSelectors(f.req('viewer','other'),[q]),
+  ()=>f.service.reviewSelectors(f.req(),[{...q,sha256:'0'.repeat(64)}]),
+  ()=>f.service.reviewSelectors(f.req(),[{...q,kind:'text',representationId:rep.id,representationDigest:rep.digest,page:null,start:0,end:1,quote:'wrong'}]),
+  ()=>f.service.reviewSelectors(f.req(),[{...q,requireCurrent:false} as typeof q]),
+  ()=>f.service.reviewSelectors({...f.req(),roles:['owner']} as EvidenceRequest,[q]),
+ ]) await assert.rejects(run());
+ assert.equal((await audits()).length,0);
+ await f.service.reviewSelectors(f.req(),[q]);
+ assert.equal((await audits()).length,1);
+ await f.service.quarantine(f.req(),a.ref,(await f.service.inspect(f.req(),a.ref)).revision,'revoke');
+ await assert.rejects(f.service.reviewSelectors(f.req(),[q]),code('evidence_quarantined'));
+ assert.equal((await audits()).length,1);
+});
+test('selector review captures request/selectors and reauthenticates after taking owning lock',async t=>{
+ const f=await setup(t),a=await f.service.acquire(f.req(),command());await f.service.runNextScan(f.req('worker'));
+ const q={kind:'whole' as const,evidence:{...a.ref},sha256:(await f.service.inspect(f.req(),a.ref)).version.sha256},req=f.req('viewer');
+ const pending=f.service.reviewSelectors(req,[q]);q.evidence.id='mutation';Object.assign(req,{purpose:'changed'});
+ assert.equal((await pending).selectors[0]!.selector.evidence.id,a.ref.id);
+ let revoked=false;
+ f.failOnce(sql=>{
+  if(sql.includes('FROM public.evidence_project') && sql.includes('FOR UPDATE')){f.identities.find(i=>i.actor.id==='viewer')!.disabled=true;revoked=true;}
+  return false;
+ });
+ await assert.rejects(f.service.reviewSelectors(f.req('viewer'),[{...q,evidence:a.ref}]),code('unauthenticated'));
+ assert.equal(revoked,true);
+});
+test('replaced selectors cannot be reviewed as current and copied bytes do not multiply source groups',async t=>{
+ const f=await setup(t),a=await f.service.acquire(f.req(),command());await f.service.runNextScan(f.req('worker'));
+ const v=await f.service.inspect(f.req(),a.ref),q={kind:'whole' as const,evidence:a.ref,sha256:v.version.sha256};
+ const b=await f.service.acquire(f.req(),command({id:'copy',idempotencyKey:'copy',acquisitionId:'copy',expectedRevision:v.revision}));await f.service.runNextScan(f.req('worker'));
+ const result=await f.service.reviewSelectors(f.req(),[q,{...q,evidence:b.ref}]);
+ assert.equal(result.sources.sourceGroupCount,1);assert.equal(result.sources.uniqueByteCount,1);assert.equal(result.sources.independentFamilyCount,null);
+ const current=await f.service.inspect(f.req(),a.ref);
+ await f.service.acquire(f.req(),command({idempotencyKey:'replacement-review',acquisitionId:'new',expectedRevision:current.revision,supersedes:a.ref,bytes:Buffer.from('new neutral fixture')}));
+ await assert.rejects(f.service.reviewSelectors(f.req(),[q]),code('stale_revision'));
+});
+
+test('owning review checks exact page/time/surrogate anchors and withholds all results on one bad selector',async t=>{
+ const f=await setup(t,{scan:async input=>({...syntheticClean(input),representation:{sourceSha256:input.sha256,text:'A😀B',pages:['Page one','Page two'],durationMs:1000,toolVersion:'synthetic-anchor-fixture'}})});
+ const a=await f.service.acquire(f.req(),command()),scan=await f.service.runNextScan(f.req('worker'));
+ const v=await f.service.inspect(f.req(),a.ref),r=await f.service.representation(f.req(),a.ref,`representation:${digest({attemptId:scan!.attemptId})}`);
+ const common={evidence:a.ref,sha256:v.version.sha256,representationId:r.id,representationDigest:r.digest};
+ const page={...common,kind:'page' as const,fromPage:1,toPage:2},time={...common,kind:'time' as const,startMs:0,endMs:1000};
+ const text={...common,kind:'text' as const,page:null,start:1,end:3,quote:'😀'};
+ assert.equal((await f.service.reviewSelectors(f.req(),[page,time,text])).selectors.length,3);
+ for(const bad of [{...page,toPage:3},{...time,endMs:1001},{...text,end:2,quote:'\uD83D'},{...page,representationDigest:'0'.repeat(64)}])
+  await assert.rejects(f.service.reviewSelectors(f.req(),[page,bad]),code('invalid_selector'));
+});
+test('lost selector-read COMMIT acknowledgement retains checked history without caching an attestation',async t=>{
+ const f=await setup(t),a=await f.service.acquire(f.req(),command());await f.service.runNextScan(f.req('worker'));
+ const observed=await f.service.inspect(f.req(),a.ref),q={kind:'whole' as const,evidence:a.ref,sha256:observed.version.sha256};
+ const lost:Database={close:async()=>{},transaction:async fn=>{await f.db.transaction(fn);throw Error('lost review COMMIT acknowledgement');}};
+ const service=new EvidenceService({database:lost,objects:f.objects,identities:async()=>f.identities,now:()=>f.ctx().now,
+  scanner:{version:'unused-fixture',scan:async()=>{throw Error('must not scan');}}});
+ await assert.rejects(service.reviewSelectors(f.req(),[q]),/lost review COMMIT/);
+ const audits=await scoped(f.db,f.ctx(),tx=>tx.audits());assert.ok(verifyAudit(audits));
+ assert.equal(audits.filter(a=>a.type==='evidence.selectors.review_checked').length,1);
+ await f.service.quarantine(f.req(),a.ref,observed.revision,'after-lost-read');
+ await assert.rejects(f.service.reviewSelectors(f.req(),[q]),code('evidence_quarantined'));
+ assert.equal((await scoped(f.db,f.ctx(),tx=>tx.audits())).filter(a=>a.type==='evidence.selectors.review_checked').length,1);
+});

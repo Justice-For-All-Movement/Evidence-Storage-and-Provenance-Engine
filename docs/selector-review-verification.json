@@ -1,0 +1,37 @@
+{
+  "scope": "Partial ESP-003 owning authenticated selector metadata review",
+  "local": {
+    "ordinaryTests": 66,
+    "typecheckBuildRegistry": "passed"
+  },
+  "installed": {
+    "publicExportServiceGroups": 25,
+    "completeTap": true,
+    "serviceAndReviewJsMatchBuild": true
+  },
+  "initialCi": {
+    "source": "f6523105f647eb2006e48da13b983bc59fac26d9",
+    "run": 41795995903,
+    "job": 126460127054,
+    "ordinaryTests": 64,
+    "logsInspected": true,
+    "conclusion": "success"
+  },
+  "sourceReview": "No unresolved finding; exact selector/current clean metadata, scoped current principal reload under owning lock, checked-audit rollback, copies/budgets/unknown families/copy dependence/lost COMMIT acknowledgement reviewed",
+  "limits": [
+    "Metadata only, no authenticated original byte read or deployed scanner/extraction truth",
+    "Existing trusted identity directory and host clocks/deadline/driver/CPU/heap controls, no distributed revocation fence",
+    "No current consent/rights, downstream Knowledge adoption, new independent SQL network, HTTP/browser/AT/live qualification",
+    "No stable SQL SDK/domain contracts/migration/legacy API changes; no providers/send/publication/payment/PAM"
+  ],
+  "finalHeadCi": "Inspect actual final PR head checks before expected-head merge",
+  "sourceSha256": {
+    "src/service.ts": "e9caec8c0acbad199babaa43710009d9a77811a202e01eba4466f21c6b99c3a9",
+    "src/selector-review.ts": "f94458f8765b5b6423c7d5cd2165df714512a8545c5817999ab7a979ea290504",
+    "tests/service.test.ts": "135671b7d914b6a11437ccc5e53dd7cafd19f14e709f03fc1c3131452fd410aa",
+    "tests/selector-review.test.ts": "d277bd2e4b02974e98d01f8824dab3de9e12aeb3f9794359581265da9f208f27",
+    "docs/SELECTOR_REVIEW.md": "fe7ec29d86052a2933421d5eeeca17675c980a313d3231cd186b2443ee439a5f",
+    "docs/SERVICE_CONTRACT.md": "01f3cfa5024ca17f4d04631bdee3ebb870af27152fd0020e0cc10a25cc8c2678",
+    "registry/prs.json": "78a5be6a1995003f88866b233e3a82302219dbe30e79849c271e7aa31ae4a066"
+  }
+}
