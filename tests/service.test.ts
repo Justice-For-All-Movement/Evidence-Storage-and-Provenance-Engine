@@ -262,3 +262,28 @@ test('replaced selectors cannot be reviewed as current and copied bytes do not m
  await f.service.acquire(f.req(),command({idempotencyKey:'replacement-review',acquisitionId:'new',expectedRevision:current.revision,supersedes:a.ref,bytes:Buffer.from('new neutral fixture')}));
  await assert.rejects(f.service.reviewSelectors(f.req(),[q]),code('stale_revision'));
 });
+
+test('owning review checks exact page/time/surrogate anchors and withholds all results on one bad selector',async t=>{
+ const f=await setup(t,{scan:async input=>({...syntheticClean(input),representation:{sourceSha256:input.sha256,text:'A😀B',pages:['Page one','Page two'],durationMs:1000,toolVersion:'synthetic-anchor-fixture'}})});
+ const a=await f.service.acquire(f.req(),command()),scan=await f.service.runNextScan(f.req('worker'));
+ const v=await f.service.inspect(f.req(),a.ref),r=await f.service.representation(f.req(),a.ref,`representation:${digest({attemptId:scan!.attemptId})}`);
+ const common={evidence:a.ref,sha256:v.version.sha256,representationId:r.id,representationDigest:r.digest};
+ const page={...common,kind:'page' as const,fromPage:1,toPage:2},time={...common,kind:'time' as const,startMs:0,endMs:1000};
+ const text={...common,kind:'text' as const,page:null,start:1,end:3,quote:'😀'};
+ assert.equal((await f.service.reviewSelectors(f.req(),[page,time,text])).selectors.length,3);
+ for(const bad of [{...page,toPage:3},{...time,endMs:1001},{...text,end:2,quote:'\uD83D'},{...page,representationDigest:'0'.repeat(64)}])
+  await assert.rejects(f.service.reviewSelectors(f.req(),[page,bad]),code('invalid_selector'));
+});
+test('lost selector-read COMMIT acknowledgement retains checked history without caching an attestation',async t=>{
+ const f=await setup(t),a=await f.service.acquire(f.req(),command());await f.service.runNextScan(f.req('worker'));
+ const observed=await f.service.inspect(f.req(),a.ref),q={kind:'whole' as const,evidence:a.ref,sha256:observed.version.sha256};
+ const lost:Database={close:async()=>{},transaction:async fn=>{await f.db.transaction(fn);throw Error('lost review COMMIT acknowledgement');}};
+ const service=new EvidenceService({database:lost,objects:f.objects,identities:async()=>f.identities,now:()=>f.ctx().now,
+  scanner:{version:'unused-fixture',scan:async()=>{throw Error('must not scan');}}});
+ await assert.rejects(service.reviewSelectors(f.req(),[q]),/lost review COMMIT/);
+ const audits=await scoped(f.db,f.ctx(),tx=>tx.audits());assert.ok(verifyAudit(audits));
+ assert.equal(audits.filter(a=>a.type==='evidence.selectors.review_checked').length,1);
+ await f.service.quarantine(f.req(),a.ref,observed.revision,'after-lost-read');
+ await assert.rejects(f.service.reviewSelectors(f.req(),[q]),code('evidence_quarantined'));
+ assert.equal((await scoped(f.db,f.ctx(),tx=>tx.audits())).filter(a=>a.type==='evidence.selectors.review_checked').length,1);
+});

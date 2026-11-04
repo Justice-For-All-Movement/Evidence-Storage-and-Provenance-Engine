@@ -100,7 +100,7 @@
         "Owning locked authenticated selector metadata review with bounded graph preflight"
       ],
       "acceptanceCriteria": "Real PGlite migration/restricted login and encrypted temporary objects exercise facade acquisition, scan/read isolation, stale/failing attempts, atomic idempotency and safe orphan cleanup. Synthetic scanner only in tests; real scanner and live acceptance separate.",
-      "implementationStatus": "partial authenticated facade plus owning selector metadata review; source checkpoint local tests in progress; installed/review/current-head CI pending; deployment/source/consent/rights acceptance remains separate",
+      "implementationStatus": "partial authenticated facade and owning selector metadata review;66 local tests/typecheck/build/registry and25 installed compiled public-export service groups pass; initialCI41795995903/check126460127054 success64/logs inspected. Source review no unresolved finding; final-head CI required. Current Evidence original-byte/scanner/consent/rights/Identity deployment and downstream Knowledge contract adoption remain pending.",
       "validation": {
         "local": "passed: Node 24.22.1; strict typecheck; 58 tests (19 facade); ESM/declaration build; compiled facade export smoke; canonical registry",
         "ci": {
