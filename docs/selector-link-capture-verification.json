@@ -1,0 +1,47 @@
+{
+  "scope": "Partial ESP-003 owning compact selector/family capture",
+  "local": {
+    "tests": 70,
+    "typecheckBuildRegistry": "passed",
+    "newRestrictedServiceGroups": 3,
+    "newKnownFamilyBudgetGroup": 1
+  },
+  "installed": {
+    "servicePublicExportTests": 28,
+    "completeTap": true,
+    "serviceAndCaptureJsByteMatch": true,
+    "credentialFixture": "local SHA256 test-directory helper; no internal identity SDK test claim",
+    "migration": "actual compiled installed package migration"
+  },
+  "initialCi": {
+    "source": "23e7abedf35ed4fda6685fa4797d8d83913ec44c",
+    "run": 41825337676,
+    "check": 126558527650,
+    "tests": 70,
+    "headAndLogsInspected": true
+  },
+  "sourceReview": [
+    "Existing reviewSelectors contract/audit type retained through private shared owning observation",
+    "New capture obtains actual compact family snapshot from same locked stored domain/context as validated selector fingerprint/source analysis",
+    "Exact current-clean scope/purpose/anchors, fresh same principal after owning project lock and bounded graph preflight retained",
+    "Complete256KiB response bound includes expanded repeated family roots; denial rolls back checked audit",
+    "No raw family/independence histories, credentials, full EvidenceState, blob operation, domain revision/effect/outbox or cached permit",
+    "SDK pins/contracts/migration unchanged; downstream must explicitly upgrade and validate before source-backed link writes"
+  ],
+  "limits": [
+    "Historical metadata after return, not original-byte/scanner/extraction/consent/rights proof or transferable permission",
+    "Host credential delegation/proofing/current identities/clock/deadline/driver/CPUheap controls required",
+    "Restricted embedded migrations and synthetic scanner/directory are not independent TCP/browser/live qualification",
+    "Knowledge source-backed link writer is still pending; never fabricate full authorized EvidenceState",
+    "No provider/send/publication/payment/PAM change"
+  ],
+  "sourceSha256": {
+    "src/selector-review.ts": "40d7f4fd59aaff1c696282167a4c8516b05166af748675814cca7dfa7d8dc10b",
+    "src/service.ts": "127503b47ff2a1a4bb69c1c78a69e701cd0b8823af34c1597e103b80e2b5436f",
+    "tests/service.test.ts": "de45b5f71aaabeba0fe461f60c3e6ef76c8f866c99e7852513b05a87b47d67f2",
+    "tests/evidence.test.ts": "ca69a237175d80d7e90f41dd7f962775aa3acf724c014c9ffabee0b8b7cca4e8",
+    "docs/SELECTOR_LINK_CAPTURE.md": "bb95ca1adeab9996b96271c708e59a43d4e0cf314ff0a418eac9a7895be64cb8",
+    "docs/ARCHITECTURE.md": "d91cf8678eedf9bb29589e7d8ecb8c413bbb8de924aecdf81526b452572a296b",
+    "registry/prs.json": "5d3f55bea1de079ab2115822663d1300c896dbc4b39a3ffa4f22c45327e79381"
+  }
+}
