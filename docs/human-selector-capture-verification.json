@@ -1,0 +1,58 @@
+{
+  "status": "PR7 source and installed CI qualification checkpoint; final documentation-head checks required before merge",
+  "sourceCommit": "7a147710115dfaa9ad423ff8161850dae73d5ee2",
+  "local": {
+    "tests": 73,
+    "fail": 0,
+    "skipped": 0,
+    "focusedServiceGroups": 3,
+    "typecheck": "passed",
+    "build": "passed",
+    "registry": "passed"
+  },
+  "ci": {
+    "observedSource": "7a147710115dfaa9ad423ff8161850dae73d5ee2",
+    "run": 41910098423,
+    "job": 126855064534,
+    "ordinaryTests": 73,
+    "installedServiceGroups": 31,
+    "fail": 0,
+    "skipped": 0,
+    "rawLogs": "inspected; both actual footers and installed-success marker",
+    "finalDocumentationHead": "required before merge"
+  },
+  "installed": {
+    "localCompletion": "not observed; local execution environment unavailable",
+    "ciFullServiceSuite": {
+      "tests": 31,
+      "fail": 0,
+      "skipped": 0
+    },
+    "normalPrepareAndFreshInstall": "passed in CI",
+    "declarationCompilation": "passed in CI",
+    "moduleByteMatch": true,
+    "ciValidationScript": "qualified by actual current-source CI41910098423"
+  },
+  "remaining": [
+    "Final documentation-head CI/branch rules/source review before merge",
+    "Explicit Knowledge SDK pin/method adoption; protected caller must obtain expected ID from current independently authenticated human",
+    "Host proofing/cross-engine mapping/delegation/current Identity-Consent/source-byte/scanner/driver/network/live acceptance"
+  ],
+  "review": [
+    "Expected human ID is a comparison target, not authentication or a delegated service identity",
+    "Exact human kind+ID before SQL and fresh after owning project lock; no legacy fallback",
+    "Existing private selector/family response, source/scope/purpose/batch/budget checks preserved",
+    "Lost read COMMIT acknowledgement is unknown; checked audit may already be committed",
+    "Shared checked audit type does not attest the human-bound profile"
+  ],
+  "sourceBlobShas": {
+    "src/service.ts": "2c27d776e60a964e99b8de7b86b9368e92b9a700",
+    "tests/service.test.ts": "d9a94351638ca0cbe9f0fc560728cd45a543792d",
+    "docs/HUMAN_SELECTOR_CAPTURE.md": "d746fa6db2428ec9aaf1e1a12e9ba1fc99c6ff40",
+    "docs/SELECTOR_LINK_CAPTURE.md": "b534ff6ee1ab1440b12ffa15c653965b8359b8af",
+    "docs/ARCHITECTURE.md": "23a3d76876310e205281b8a342659859f76f49b3",
+    "registry/prs.json": "6cf3679cca5655a54f2d1e5e92f91cf6c8953524",
+    "package.json": "f7969c235e548b1157274deb2a5150075ce56b5c",
+    "scripts/check-installed-service.mjs": "c58769e783cedb35f09d990e004d808ac431ee6f"
+  }
+}

@@ -339,3 +339,57 @@ test('lost selector-capture COMMIT acknowledgement is unknown and later quaranti
  await assert.rejects(f.service.captureSelectorLinks(f.req(),[q]),code('evidence_quarantined'));
  assert.equal((await scoped(f.db,f.ctx(),tx=>tx.audits())).filter(x=>x.type==='evidence.selectors.capture_checked').length,1);
 });
+
+test('human-bound selector capture requires the exact authenticated human before SQL, even when a service or agent shares its actor ID', async t => {
+ const f = await setup(t), acquired = await f.service.acquire(f.req(), command());
+ await f.service.runNextScan(f.req('worker'));
+ const observed = await f.service.inspect(f.req(), acquired.ref);
+ const selector = {kind: 'whole' as const, evidence: acquired.ref, sha256: observed.version.sha256};
+ const count = async () => (await scoped(f.db, f.ctx(), tx => tx.audits())).filter(x => x.type === 'evidence.selectors.capture_checked').length;
+ const captured = await f.service.captureSelectorLinksForHuman(f.req('viewer'), [selector], 'viewer');
+ assert.deepEqual(captured.selectors[0]!.selector, selector);
+ const before = await count();
+ await assert.rejects(f.service.captureSelectorLinksForHuman(f.req('author'), [selector], 'viewer'), code('principal_mismatch'));
+ const worker = f.identities.find(i => i.actor.id === 'worker')!;
+ Object.assign(worker.actor, {id: 'viewer'});
+ await assert.rejects(f.service.captureSelectorLinksForHuman(f.req('worker'), [selector], 'viewer'), code('principal_mismatch'));
+ Object.assign(worker.actor, {kind: 'agent'});
+ await assert.rejects(f.service.captureSelectorLinksForHuman(f.req('worker'), [selector], 'viewer'), code('principal_mismatch'));
+ for (const id of ['', 'x'.repeat(129)]) await assert.rejects(f.service.captureSelectorLinksForHuman(f.req('viewer'), [selector], id));
+ assert.equal(await count(), before);
+ // Service credentials remain an explicit legacy path, not a fallback from a rejected human-bound call.
+ assert.equal((await f.service.captureSelectorLinks(f.req('worker'), [selector])).selectors.length, 1);
+ assert.ok(verifyAudit(await scoped(f.db, f.ctx(), tx => tx.audits())));
+});
+test('human-bound capture reloads the directory after its owning lock and retains scope, purpose, source and request-copy checks', async t => {
+ const f = await setup(t), acquired = await f.service.acquire(f.req(), command());
+ await f.service.runNextScan(f.req('worker'));
+ const observed = await f.service.inspect(f.req(), acquired.ref);
+ const selector = {kind: 'whole' as const, evidence: {...acquired.ref}, sha256: observed.version.sha256};
+ const request = f.req('viewer'), pending = f.service.captureSelectorLinksForHuman(request, [selector], 'viewer');
+ Object.assign(request, {purpose: 'caller-mutated'}); selector.evidence.id = 'caller-mutated';
+ assert.equal((await pending).selectors[0]!.selector.evidence.id, acquired.ref.id);
+ const exact = {...selector, evidence: acquired.ref};
+ const before = (await scoped(f.db, f.ctx(), tx => tx.audits())).length;
+ for (const request of [f.req('foreign'), f.req('viewer', 'wrong')]) await assert.rejects(f.service.captureSelectorLinksForHuman(request, [exact], 'viewer'));
+ await assert.rejects(f.service.captureSelectorLinksForHuman(f.req('viewer'), [{...exact, sha256: '0'.repeat(64)}], 'viewer'));
+ f.failOnce(sql => {if (sql.includes('FROM public.evidence_project') && sql.includes('FOR UPDATE')) f.identities.find(i => i.actor.id === 'viewer')!.disabled = true; return false;});
+ await assert.rejects(f.service.captureSelectorLinksForHuman(f.req('viewer'), [exact], 'viewer'), code('unauthenticated'));
+ assert.equal((await scoped(f.db, f.ctx(), tx => tx.audits())).length, before);
+});
+test('lost human-bound capture acknowledgement remains unknown and a fresh human revocation withholds later captures', async t => {
+ const f = await setup(t), acquired = await f.service.acquire(f.req(), command());
+ await f.service.runNextScan(f.req('worker'));
+ const observed = await f.service.inspect(f.req(), acquired.ref);
+ const selector = {kind: 'whole' as const, evidence: acquired.ref, sha256: observed.version.sha256};
+ const lost: Database = {close: async () => {}, transaction: async fn => {await f.db.transaction(fn); throw Error('lost human capture COMMIT acknowledgement');}};
+ const service = new EvidenceService({database: lost, objects: f.objects, identities: async () => f.identities, now: () => f.ctx().now,
+  scanner: {version: 'unused-fixture', scan: async () => {throw Error('must not scan');}}});
+ await assert.rejects(service.captureSelectorLinksForHuman(f.req('viewer'), [selector], 'viewer'), /lost human capture COMMIT/);
+ const captureAudits = (await scoped(f.db, f.ctx(), tx => tx.audits())).filter(x => x.type === 'evidence.selectors.capture_checked');
+ assert.equal(captureAudits.length, 1); assert.equal(captureAudits[0]!.actorId, 'viewer');
+ assert.ok(!JSON.stringify(captureAudits).includes(f.tokens.viewer));
+ f.identities.find(i => i.actor.id === 'viewer')!.disabled = true;
+ await assert.rejects(f.service.captureSelectorLinksForHuman(f.req('viewer'), [selector], 'viewer'), code('unauthenticated'));
+ assert.equal((await scoped(f.db, f.ctx(), tx => tx.audits())).filter(x => x.type === 'evidence.selectors.capture_checked').length, 1);
+});
