@@ -136,11 +136,21 @@ export class EvidenceService {
   async captureSelectorLinks(request: EvidenceRequest, selectors: readonly EvidenceSelector[]): Promise<SelectorLinkCapture> {
     return this.#observeSelectors(request, selectors, 'evidence.selectors.capture_checked', captureSelectorLinks);
   }
+  /** Require this authenticated Evidence credential to represent the expected human; expectation is not authentication. */
+  async captureSelectorLinksForHuman(request: EvidenceRequest, selectors: readonly EvidenceSelector[], humanId: string): Promise<SelectorLinkCapture> {
+    nonempty(humanId, 'Expected human actor ID', 128);
+    return this.#observeSelectors(request, selectors, 'evidence.selectors.capture_checked', captureSelectorLinks, humanId);
+  }
   async #observeSelectors<T>(request: EvidenceRequest, selectors: readonly EvidenceSelector[],
     auditType: 'evidence.selectors.review_checked' | 'evidence.selectors.capture_checked',
-    project: (state: EvidenceState, context: Context, selected: readonly EvidenceSelector[], revision: number) => T): Promise<T> {
+    project: (state: EvidenceState, context: Context, selected: readonly EvidenceSelector[], revision: number) => T,
+    expectedHumanId?: string): Promise<T> {
     const captured = captureSelectors(selectors), credential = structuredClone(request);
+    const requireHuman = (context: Context) => invariant(expectedHumanId === undefined ||
+      (context.actor.kind === 'human' && context.actor.id === expectedHumanId),
+      'principal_mismatch', 'Authenticated human credential required');
     const ctx = await this.#context(credential, 'read');
+    requireHuman(ctx);
     for (const selector of captured) authorize(ctx, 'read', selector.evidence);
     return scoped(this.#db, ctx, async tx => {
       // Acquire owning project lock BEFORE current directory observation and aggregate read.
@@ -149,6 +159,7 @@ export class EvidenceService {
       requireScope(ctx, current);
       invariant(current.actor.id === ctx.actor.id && current.actor.kind === ctx.actor.kind,
         'unauthenticated', 'Authenticated principal changed');
+      requireHuman(current);
       for (const selector of captured) authorize(current, 'read', selector.evidence);
       const stored = await tx.get<Aggregate>(KIND, ID);
       invariant(stored, 'not_found', 'Evidence aggregate missing');

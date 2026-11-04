@@ -21,3 +21,5 @@ Synthetic automated tests cover exact bytes/hash, immutable revisions, quarantin
 Next coordinated work: Identity-gated service boundary; durable metadata and object transaction adapter with concurrent-writer tests; real scanner integration; external audit anchoring; key lifecycle and retention; live service acceptance. These are follow-up integration tasks, not additional approved PRs in this foundation scope.
 
 SELECTOR_LINK_CAPTURE.md documents the additive owning selector/link metadata capture with compact selected family basis. Existing reviewSelectors stays unchanged; current Knowledge link writes and source/consent/deployment acceptance remain separate.
+
+HUMAN_SELECTOR_CAPTURE.md documents opt-in exact authenticated human credential matching on owning selector capture; expected IDs are comparison targets, not authentication or current Consent/use permission.

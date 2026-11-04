@@ -4,7 +4,7 @@
   "roadmapVersion": 3,
   "planVerified": true,
   "plannedPrCount": 3,
-  "observedAt": "2026-10-26T19:48:06Z",
+  "observedAt": "2026-11-04T20:40:00Z",
   "units": [
     {
       "id": "ESP-001",
@@ -102,7 +102,7 @@
         "Owning locked compact selector/family captures for future source-backed Knowledge link writes"
       ],
       "acceptanceCriteria": "Real PGlite migration/restricted login and encrypted temporary objects exercise facade acquisition, scan/read isolation, stale/failing attempts, atomic idempotency and safe orphan cleanup. Synthetic scanner only in tests; real scanner and live acceptance separate.",
-      "implementationStatus": "partial authenticated facade and owning selector metadata review;66 local tests/typecheck/build/registry and25 installed compiled public-export service groups pass; initialCI41795995903/check126460127054 success64/logs inspected. Source review no unresolved finding; final-head CI required. Current Evidence original-byte/scanner/consent/rights/Identity deployment and downstream Knowledge contract adoption remain pending. PR6 partial additive captureSelectorLinks: same locked authenticated observation, actual compact family snapshot/fingerprint/source analysis, complete256KiB result bound; four new groups. All70 local ordinary tests/typecheck/build/registry and28 installed compiled public-export service groups pass; service/capture JS byte-match; initialCI41825337676/check126558527650 PASS70/headlogs inspected. Source review no unresolved finding; final-head CI required. Knowledge source-backed writes/credential delegation/consent/rights/live remain separate.",
+      "implementationStatus": "partial authenticated facade/selector capture. PR6 acceptedcad367c344adafa667c6670d6de1bd051ecbf4db/sourcef13686e888c7539b86564c3709608ef5cf2ccac2/finalCI41825752867 pass70;28 installed service groups passed. Knowledge13/14/15 adopted legacy capture and current Consent guards. New captureSelectorLinksForHuman profile requires actual exact human credential principal before SQL and after own lock/current directory reload. Three new restricted-migration/encrypted-root groups pass; typecheck/build/registry/full73 ordinary/installed/current-head CI qualification pending at this incomplete source checkpoint. Explicit downstream adoption, host proofing/mapping/delegation, current Identity/Consent/byte/scanner/TCP/live remain separate.",
       "validation": {
         "local": "passed: Node 24.22.1; strict typecheck; 58 tests (19 facade); ESM/declaration build; compiled facade export smoke; canonical registry",
         "ci": {
@@ -115,6 +115,11 @@
           "url": "https://github.com/neophilism/Evidence-Storage-and-Provenance-Engine/actions/runs/40389725032"
         },
         "live": "not_performed"
+      },
+      "humanSelectorCapture": {
+        "docs": "docs/HUMAN_SELECTOR_CAPTURE.md",
+        "status": "incomplete source checkpoint",
+        "focusedGroups": 3
       }
     }
   ],
