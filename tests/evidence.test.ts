@@ -164,3 +164,21 @@ test('redacted derivatives retain exact lineage, quarantine, purpose and source 
   s=e.quarantineEvidence(s,ctx,{id:'parent-q',evidence:v.ref,reason:'Fixture recall'});
   rejects('evidence_quarantined',()=>e.requireEvidenceUsable(s,share,result.ref));
 });
+
+test('selector capture retains known shared roots and rejects expanded family output over its response budget',async()=>{
+ const {captureSelectorLinks,reviewSelectors}=await import('../src/selector-review.ts');
+ let s=e.createEvidenceState(ctx);
+ for(let i=0;i<63;i++)s=e.addSourceFamily(s,ctx,{id:`root-${i}-`+'x'.repeat(120),label:'Fictional root',parentIds:[],reason:'Synthetic lineage only'});
+ const roots=s.families.map(f=>f.id);
+ s=e.addSourceFamily(s,ctx,{id:'derived-family',label:'Shared ancestry',parentIds:roots,reason:'Synthetic shared roots, not independence proof'});
+ s=clean(e.acquireEvidence(s,ctx,{...input(),sourceFamilyId:'derived-family'}));
+ const v=last(s),q={kind:'whole' as const,evidence:v.ref,sha256:v.sha256};
+ const captured=captureSelectorLinks(s,ctx,[q],1);
+ assert.equal(captured.selectors[0]!.family.familyId,'derived-family');
+ assert.deepEqual(captured.selectors[0]!.family.roots,e.getFamilySnapshot(s,ctx,v.ref).roots);
+ assert.equal(captured.selectors[0]!.family.roots.length,63);
+ assert.equal(captured.selectors[0]!.fingerprint,e.evidenceDependencyFingerprint(s,ctx,q));
+ const many=Array.from({length:64},()=>q);
+ assert.equal(reviewSelectors(s,ctx,many,1).selectors.length,64);
+ rejects('review_full',()=>captureSelectorLinks(s,ctx,many,1));
+});

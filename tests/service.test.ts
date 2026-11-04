@@ -1,3 +1,4 @@
+import {addSourceFamily, getFamilySnapshot, type EvidenceState} from '../src/index.ts';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {randomBytes,createHash} from 'node:crypto';
@@ -286,4 +287,55 @@ test('lost selector-read COMMIT acknowledgement retains checked history without 
  await f.service.quarantine(f.req(),a.ref,observed.revision,'after-lost-read');
  await assert.rejects(f.service.reviewSelectors(f.req(),[q]),code('evidence_quarantined'));
  assert.equal((await scoped(f.db,f.ctx(),tx=>tx.audits())).filter(a=>a.type==='evidence.selectors.review_checked').length,1);
+});
+
+
+test('owning selector link capture returns exact current compact family basis without full histories or effects',async t=>{
+ const f=await setup(t),a=await f.service.acquire(f.req(),command());await f.service.runNextScan(f.req('worker'));
+ const observed=await f.service.inspect(f.req(),a.ref),q={kind:'whole' as const,evidence:a.ref,sha256:observed.version.sha256};
+ const before=await f.rows('SELECT * FROM public.evidence_outbox');
+ const captured=await f.service.captureSelectorLinks(f.req('viewer'),[q]);
+ const stored=await scoped(f.db,f.ctx(),tx=>tx.get<{domain:EvidenceState}>('evidence.aggregate','project'));
+ assert.equal(captured.revision,stored!.revision);assert.equal(captured.purpose,'verify-fixture');
+ assert.deepEqual(captured.selectors[0]!.family,getFamilySnapshot(stored!.value.domain,f.ctx(),a.ref));
+ assert.deepEqual(captured.selectors[0]!.family.roots,[]);assert.equal(captured.selectors[0]!.family.familyId,null);
+ assert.deepEqual(Object.keys(captured.selectors[0]!).sort(),['family','fingerprint','selector']);
+ assert.deepEqual(Object.keys(captured.selectors[0]!.family).sort(),['basisDigest','familyId','roots']);
+ assert.equal('families' in captured,false);assert.equal('representations' in captured,false);
+ const historic=structuredClone(captured);
+ // Owning fixture bootstrap only, not a production family-admin route.
+ await scoped(f.db,f.ctx(),async tx=>{const s=await tx.get<{domain:EvidenceState}>('evidence.aggregate','project');
+  await tx.put('evidence.aggregate','project',s!.revision,{...s!.value,domain:addSourceFamily(s!.value.domain,f.ctx(),{id:'fixture-family',label:'Fixture',parentIds:[],reason:'Synthetic lineage fixture'})});});
+ const current=await f.service.captureSelectorLinks(f.req(),[q]);
+ assert.notEqual(current.selectors[0]!.family.basisDigest,historic.selectors[0]!.family.basisDigest);
+ assert.notEqual(current.selectors[0]!.fingerprint,historic.selectors[0]!.fingerprint);
+ (current.selectors[0]!.family.roots as string[]).push('caller-mutation');
+ assert.deepEqual((await f.service.captureSelectorLinks(f.req(),[q])).selectors[0]!.family.roots,[]);
+ assert.deepEqual(await f.rows('SELECT * FROM public.evidence_outbox'),before);
+ const audits=await scoped(f.db,f.ctx(),tx=>tx.audits());assert.ok(verifyAudit(audits));
+ assert.ok(!JSON.stringify(audits).includes(f.tokens.viewer));
+});
+test('selector capture preserves exact admission, request copies, batch anchor denial and current post-lock identity',async t=>{
+ const f=await setup(t),a=await f.service.acquire(f.req(),command());await f.service.runNextScan(f.req('worker'));
+ const q={kind:'whole' as const,evidence:{...a.ref},sha256:(await f.service.inspect(f.req(),a.ref)).version.sha256};
+ const request=f.req('viewer'),pending=f.service.captureSelectorLinks(request,[q]);q.evidence.id='caller-mutation';Object.assign(request,{purpose:'wrong'});
+ assert.equal((await pending).selectors[0]!.selector.evidence.id,a.ref.id);
+ const exact={...q,evidence:a.ref};
+ for(const request of [f.req('foreign'),f.req('viewer','wrong')]) await assert.rejects(f.service.captureSelectorLinks(request,[exact]));
+ const count=async()=> (await scoped(f.db,f.ctx(),tx=>tx.audits())).filter(x=>x.type==='evidence.selectors.capture_checked').length;
+ const before=await count();await assert.rejects(f.service.captureSelectorLinks(f.req(),[exact,{...exact,sha256:'0'.repeat(64)}]));assert.equal(await count(),before);
+ f.failOnce(sql=>{if(sql.includes('FROM public.evidence_project')&&sql.includes('FOR UPDATE'))f.identities.find(i=>i.actor.id==='viewer')!.disabled=true;return false;});
+ await assert.rejects(f.service.captureSelectorLinks(f.req('viewer'),[exact]),code('unauthenticated'));assert.equal(await count(),before);
+});
+test('lost selector-capture COMMIT acknowledgement is unknown and later quarantine denies a fresh capture',async t=>{
+ const f=await setup(t),a=await f.service.acquire(f.req(),command());await f.service.runNextScan(f.req('worker'));
+ const observed=await f.service.inspect(f.req(),a.ref),q={kind:'whole' as const,evidence:a.ref,sha256:observed.version.sha256};
+ const lost:Database={close:async()=>{},transaction:async fn=>{await f.db.transaction(fn);throw Error('lost capture COMMIT acknowledgement');}};
+ const service=new EvidenceService({database:lost,objects:f.objects,identities:async()=>f.identities,now:()=>f.ctx().now,
+  scanner:{version:'unused-fixture',scan:async()=>{throw Error('must not scan');}}});
+ await assert.rejects(service.captureSelectorLinks(f.req(),[q]),/lost capture COMMIT/);
+ assert.equal((await scoped(f.db,f.ctx(),tx=>tx.audits())).filter(x=>x.type==='evidence.selectors.capture_checked').length,1);
+ await f.service.quarantine(f.req(),a.ref,observed.revision,'after-unknown-capture');
+ await assert.rejects(f.service.captureSelectorLinks(f.req(),[q]),code('evidence_quarantined'));
+ assert.equal((await scoped(f.db,f.ctx(),tx=>tx.audits())).filter(x=>x.type==='evidence.selectors.capture_checked').length,1);
 });

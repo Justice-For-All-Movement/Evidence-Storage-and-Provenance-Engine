@@ -1,6 +1,6 @@
 import {canonical, invariant, validateRef, type Context, type Scope} from './contracts.ts';
 import {analyzeSources, assertEvidenceState, evidenceDependencyFingerprint, validateEvidenceSelector,
-  type EvidenceSelector, type EvidenceState, type SourceAnalysis} from './index.ts';
+  getFamilySnapshot, type FamilySnapshot, type EvidenceSelector, type EvidenceState, type SourceAnalysis} from './index.ts';
 
 /** Owning metadata observation only; never a content verification or transferable permission. */
 export type SelectorReview = Scope & Readonly<{
@@ -53,5 +53,18 @@ export function reviewSelectors(s: EvidenceState, c: Context, selected: readonly
   const result: SelectorReview = {schemaVersion:1,tenantId:c.tenantId,projectId:c.projectId,purpose:c.purpose,revision,
     selectors, sources:analyzeSources(s,c,selected.map(s => s.evidence))};
   invariant(Buffer.byteLength(canonical(result)) <= 256 * 1024, 'review_full', 'Selector response budget exceeded');
+  return structuredClone(result);
+}
+
+/** Compact owning family capture for later private link records, not raw family history or authority. */
+export type SelectorLinkCapture = Omit<SelectorReview, 'selectors'> & Readonly<{
+  selectors: readonly Readonly<{selector: EvidenceSelector; fingerprint: string; family: FamilySnapshot}>[];
+}>;
+export function captureSelectorLinks(s: EvidenceState, c: Context, selected: readonly EvidenceSelector[], revision: number): SelectorLinkCapture {
+  const review = reviewSelectors(s,c,selected,revision);
+  const result: SelectorLinkCapture = {...review, selectors: review.selectors.map(entry => ({
+    ...entry, family: getFamilySnapshot(s,c,entry.selector.evidence)
+  }))};
+  invariant(Buffer.byteLength(canonical(result)) <= 256 * 1024, 'review_full', 'Selector capture response budget exceeded');
   return structuredClone(result);
 }
