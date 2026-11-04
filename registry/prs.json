@@ -82,7 +82,8 @@
         3
       ],
       "contributingPrs": [
-        5
+        5,
+        6
       ],
       "dependsOn": [
         "ESP-001",
@@ -97,10 +98,11 @@
         "Atomic acquisition publication and durable upload intents",
         "Generation-fenced trusted scan worker and clean authorized representations",
         "Safe reference-checked orphan reconciliation",
-        "Owning locked authenticated selector metadata review with bounded graph preflight"
+        "Owning locked authenticated selector metadata review with bounded graph preflight",
+        "Owning locked compact selector/family captures for future source-backed Knowledge link writes"
       ],
       "acceptanceCriteria": "Real PGlite migration/restricted login and encrypted temporary objects exercise facade acquisition, scan/read isolation, stale/failing attempts, atomic idempotency and safe orphan cleanup. Synthetic scanner only in tests; real scanner and live acceptance separate.",
-      "implementationStatus": "partial authenticated facade and owning selector metadata review;66 local tests/typecheck/build/registry and25 installed compiled public-export service groups pass; initialCI41795995903/check126460127054 success64/logs inspected. Source review no unresolved finding; final-head CI required. Current Evidence original-byte/scanner/consent/rights/Identity deployment and downstream Knowledge contract adoption remain pending.",
+      "implementationStatus": "partial authenticated facade and owning selector metadata review;66 local tests/typecheck/build/registry and25 installed compiled public-export service groups pass; initialCI41795995903/check126460127054 success64/logs inspected. Source review no unresolved finding; final-head CI required. Current Evidence original-byte/scanner/consent/rights/Identity deployment and downstream Knowledge contract adoption remain pending. PR6 partial additive captureSelectorLinks: same locked authenticated observation, actual compact family snapshot/fingerprint/source analysis, complete256KiB result bound; four new groups. All70 local ordinary tests/typecheck/build/registry and28 installed compiled public-export service groups pass; service/capture JS byte-match; initialCI41825337676/check126558527650 PASS70/headlogs inspected. Source review no unresolved finding; final-head CI required. Knowledge source-backed writes/credential delegation/consent/rights/live remain separate.",
       "validation": {
         "local": "passed: Node 24.22.1; strict typecheck; 58 tests (19 facade); ESM/declaration build; compiled facade export smoke; canonical registry",
         "ci": {

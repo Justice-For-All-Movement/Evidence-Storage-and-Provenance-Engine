@@ -1,5 +1,5 @@
-import {captureSelectors, assertReviewBudget, reviewSelectors, type SelectorReview} from './selector-review.ts';
-export type {SelectorReview} from './selector-review.ts';
+import {captureSelectors, assertReviewBudget, reviewSelectors, captureSelectorLinks, type SelectorLinkCapture, type SelectorReview} from './selector-review.ts';
+export type {SelectorReview, SelectorLinkCapture} from './selector-review.ts';
 import { authenticate, authorize, type Identity } from './identity-sdk.ts';
 import { DomainError, digest, hashBytes, invariant, nonempty, requireScope, validTime, type Context, type Json } from './contracts.ts';
 import { scoped, type Database, type LeasedJob, type UnitOfWork } from './database.ts';
@@ -130,12 +130,21 @@ export class EvidenceService {
   }
   /** Authenticated owning metadata review; no source bytes, raw histories or effect authority. */
   async reviewSelectors(request: EvidenceRequest, selectors: readonly EvidenceSelector[]): Promise<SelectorReview> {
+    return this.#observeSelectors(request, selectors, 'evidence.selectors.review_checked', reviewSelectors);
+  }
+  /** Current owning compact family/selector capture; does not create Knowledge links or grant use. */
+  async captureSelectorLinks(request: EvidenceRequest, selectors: readonly EvidenceSelector[]): Promise<SelectorLinkCapture> {
+    return this.#observeSelectors(request, selectors, 'evidence.selectors.capture_checked', captureSelectorLinks);
+  }
+  async #observeSelectors<T>(request: EvidenceRequest, selectors: readonly EvidenceSelector[],
+    auditType: 'evidence.selectors.review_checked' | 'evidence.selectors.capture_checked',
+    project: (state: EvidenceState, context: Context, selected: readonly EvidenceSelector[], revision: number) => T): Promise<T> {
     const captured = captureSelectors(selectors), credential = structuredClone(request);
     const ctx = await this.#context(credential, 'read');
     for (const selector of captured) authorize(ctx, 'read', selector.evidence);
     return scoped(this.#db, ctx, async tx => {
       // Acquire owning project lock BEFORE current directory observation and aggregate read.
-      await tx.audit('evidence.selectors.review_checked', {selectorCount: captured.length});
+      await tx.audit(auditType, {selectorCount: captured.length});
       const current = await this.#context(credential, 'read');
       requireScope(ctx, current);
       invariant(current.actor.id === ctx.actor.id && current.actor.kind === ctx.actor.kind,
@@ -145,7 +154,7 @@ export class EvidenceService {
       invariant(stored, 'not_found', 'Evidence aggregate missing');
       requireScope(current, stored.value.domain);
       assertReviewBudget(stored.value.domain);
-      return reviewSelectors(stored.value.domain, current, captured, stored.revision);
+      return project(stored.value.domain, current, captured, stored.revision);
     });
   }
   async read(request: EvidenceRequest, ref: EvidenceRef): Promise<Uint8Array> {

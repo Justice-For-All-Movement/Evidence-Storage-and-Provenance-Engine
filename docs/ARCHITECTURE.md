@@ -19,3 +19,5 @@ Metadata snapshots and object receipts are separate. A trusted consumer must per
 Synthetic automated tests cover exact bytes/hash, immutable revisions, quarantine and stale scans, selectors and revisions, source independence and graph invalidation, tenant/project isolation, metadata/handling corruption, redacted lineage and encrypted envelope tampering. Object tests use ephemeral random keys and temporary directories.
 
 Next coordinated work: Identity-gated service boundary; durable metadata and object transaction adapter with concurrent-writer tests; real scanner integration; external audit anchoring; key lifecycle and retention; live service acceptance. These are follow-up integration tasks, not additional approved PRs in this foundation scope.
+
+SELECTOR_LINK_CAPTURE.md documents the additive owning selector/link metadata capture with compact selected family basis. Existing reviewSelectors stays unchanged; current Knowledge link writes and source/consent/deployment acceptance remain separate.
