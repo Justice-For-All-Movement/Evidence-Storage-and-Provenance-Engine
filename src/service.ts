@@ -1,3 +1,5 @@
+import {captureSelectors, assertReviewBudget, reviewSelectors, type SelectorReview} from './selector-review.ts';
+export type {SelectorReview} from './selector-review.ts';
 import { authenticate, authorize, type Identity } from './identity-sdk.ts';
 import { DomainError, digest, hashBytes, invariant, nonempty, requireScope, validTime, type Context, type Json } from './contracts.ts';
 import { scoped, type Database, type LeasedJob, type UnitOfWork } from './database.ts';
@@ -5,7 +7,7 @@ import { PrivateObjectStore, type ObjectReceipt } from './objects.ts';
 import {
   acquireEvidence, addRepresentation, assertEvidenceState, beginScan, completeScan, createEvidenceState,
   getEvidenceVersion, getScanStatus, quarantineEvidence, requireEvidenceUsable,
-  type EvidenceState, type EvidenceRef, type EvidenceVersion, type Representation,
+  type EvidenceState, type EvidenceRef, type EvidenceVersion, type Representation, type EvidenceSelector,
 } from './index.ts';
 export type { Identity } from './identity-sdk.ts';
 
@@ -125,6 +127,26 @@ export class EvidenceService {
   async inspect(request: EvidenceRequest, ref: EvidenceRef): Promise<{ version: EvidenceVersion; scan: ReturnType<typeof getScanStatus>; revision: number }> {
     const captured = structuredClone(ref); const ctx = await this.#context(request, 'read'); authorize(ctx, 'read', captured);
     return scoped(this.#db, ctx, async tx => { const aggregate = await this.#load(tx, ctx); return { version: getEvidenceVersion(aggregate.value.domain, ctx, captured), scan: getScanStatus(aggregate.value.domain, ctx, captured), revision: aggregate.revision }; });
+  }
+  /** Authenticated owning metadata review; no source bytes, raw histories or effect authority. */
+  async reviewSelectors(request: EvidenceRequest, selectors: readonly EvidenceSelector[]): Promise<SelectorReview> {
+    const captured = captureSelectors(selectors), credential = structuredClone(request);
+    const ctx = await this.#context(credential, 'read');
+    for (const selector of captured) authorize(ctx, 'read', selector.evidence);
+    return scoped(this.#db, ctx, async tx => {
+      // Acquire owning project lock BEFORE current directory observation and aggregate read.
+      await tx.audit('evidence.selectors.review_checked', {selectorCount: captured.length});
+      const current = await this.#context(credential, 'read');
+      requireScope(ctx, current);
+      invariant(current.actor.id === ctx.actor.id && current.actor.kind === ctx.actor.kind,
+        'unauthenticated', 'Authenticated principal changed');
+      for (const selector of captured) authorize(current, 'read', selector.evidence);
+      const stored = await tx.get<Aggregate>(KIND, ID);
+      invariant(stored, 'not_found', 'Evidence aggregate missing');
+      requireScope(current, stored.value.domain);
+      assertReviewBudget(stored.value.domain);
+      return reviewSelectors(stored.value.domain, current, captured, stored.revision);
+    });
   }
   async read(request: EvidenceRequest, ref: EvidenceRef): Promise<Uint8Array> {
     const captured = structuredClone(ref); const ctx = await this.#context(request, 'read'); authorize(ctx, 'read', captured);

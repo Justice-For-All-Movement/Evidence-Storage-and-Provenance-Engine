@@ -81,7 +81,9 @@
       "prs": [
         3
       ],
-      "contributingPrs": [],
+      "contributingPrs": [
+        5
+      ],
       "dependsOn": [
         "ESP-001",
         "ESP-002"
@@ -94,10 +96,11 @@
         "Identity authenticated scoped commands and optimistic aggregate revisions",
         "Atomic acquisition publication and durable upload intents",
         "Generation-fenced trusted scan worker and clean authorized representations",
-        "Safe reference-checked orphan reconciliation"
+        "Safe reference-checked orphan reconciliation",
+        "Owning locked authenticated selector metadata review with bounded graph preflight"
       ],
       "acceptanceCriteria": "Real PGlite migration/restricted login and encrypted temporary objects exercise facade acquisition, scan/read isolation, stale/failing attempts, atomic idempotency and safe orphan cleanup. Synthetic scanner only in tests; real scanner and live acceptance separate.",
-      "implementationStatus": "implemented_foundation",
+      "implementationStatus": "partial authenticated facade plus owning selector metadata review; source checkpoint local tests in progress; installed/review/current-head CI pending; deployment/source/consent/rights acceptance remains separate",
       "validation": {
         "local": "passed: Node 24.22.1; strict typecheck; 58 tests (19 facade); ESM/declaration build; compiled facade export smoke; canonical registry",
         "ci": {
@@ -142,12 +145,12 @@
       "id": 5023450111,
       "number": 3,
       "title": "ESP-003: Add authenticated evidence command facade and trusted scan worker",
-      "state": "open",
+      "state": "closed",
       "url": "https://github.com/neophilism/Evidence-Storage-and-Provenance-Engine/pull/3",
       "createdAt": "2026-10-26T19:32:00Z",
-      "updatedAt": "2026-10-26T19:48:06Z",
-      "mergedAt": null,
-      "closedAt": null,
+      "updatedAt": "2026-10-26T19:50:35Z",
+      "mergedAt": "2026-10-26T19:50:35Z",
+      "closedAt": "2026-10-26T19:50:35Z",
       "draft": false
     }
   ]
