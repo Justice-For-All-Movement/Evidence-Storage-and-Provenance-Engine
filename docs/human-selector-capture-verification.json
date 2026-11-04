@@ -1,0 +1,50 @@
+{
+  "status": "incomplete draft PR7; installed validation/current-head CI required before merge",
+  "sourceCommit": "7ba36b34044767058cab2b91f7ac481bd0224808",
+  "local": {
+    "tests": 73,
+    "fail": 0,
+    "skipped": 0,
+    "focusedServiceGroups": 3,
+    "typecheck": "passed",
+    "build": "passed",
+    "registry": "passed"
+  },
+  "ci": {
+    "observedSource": "7ba36b34044767058cab2b91f7ac481bd0224808",
+    "run": 41908474996,
+    "job": 126849384679,
+    "tests": 73,
+    "fail": 0,
+    "skipped": 0,
+    "rawLogs": "inspected"
+  },
+  "installed": {
+    "normalInstall": "passed",
+    "fullServiceSuite": "launched; final footer not observed before execution environment unavailable",
+    "declarationCompilation": "not run: exec-server unavailable",
+    "moduleByteMatch": "not independently observed; no success claimed",
+    "ciValidationScript": "new; pending actual current-head success"
+  },
+  "remaining": [
+    "Actual isolated installed public-export tests/declaration compilation/module byte match via check:installed",
+    "Actual current-head CI and branch rules/source review before merge",
+    "Explicit Knowledge SDK pin/method adoption; protected caller must obtain expected ID from current independently authenticated human",
+    "Host proofing/cross-engine mapping/delegation/current Identity-Consent/source-byte/scanner/driver/network/live acceptance"
+  ],
+  "review": [
+    "Expected human ID is a comparison target, not authentication or a delegated service identity",
+    "Exact human kind+ID before SQL and fresh after owning project lock; no legacy fallback",
+    "Existing private selector/family response, source/scope/purpose/batch/budget checks preserved",
+    "Lost read COMMIT acknowledgement is unknown; checked audit may already be committed",
+    "Shared checked audit type does not attest the human-bound profile"
+  ],
+  "sourceBlobShas": {
+    "src/service.ts": "2c27d776e60a964e99b8de7b86b9368e92b9a700",
+    "tests/service.test.ts": "d9a94351638ca0cbe9f0fc560728cd45a543792d",
+    "docs/HUMAN_SELECTOR_CAPTURE.md": "892b4da014a71ddb3322433a015b635e745cb746",
+    "docs/SELECTOR_LINK_CAPTURE.md": "b534ff6ee1ab1440b12ffa15c653965b8359b8af",
+    "docs/ARCHITECTURE.md": "23a3d76876310e205281b8a342659859f76f49b3",
+    "registry/prs.json": "cf2e173eb94e8d42dfb9944dcb52d2589f3d9559"
+  }
+}
