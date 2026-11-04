@@ -132,6 +132,11 @@ export class EvidenceService {
   async reviewSelectors(request: EvidenceRequest, selectors: readonly EvidenceSelector[]): Promise<SelectorReview> {
     return this.#observeSelectors(request, selectors, 'evidence.selectors.review_checked', reviewSelectors);
   }
+  /** Explicit expected-human profile for owning selector review; comparison is not proofing. */
+  async reviewSelectorsForHuman(request: EvidenceRequest, selectors: readonly EvidenceSelector[], humanId: string): Promise<SelectorReview> {
+    nonempty(humanId, 'Expected human actor ID', 128);
+    return this.#observeSelectors(request, selectors, 'evidence.selectors.review_checked', reviewSelectors, humanId);
+  }
   /** Current owning compact family/selector capture; does not create Knowledge links or grant use. */
   async captureSelectorLinks(request: EvidenceRequest, selectors: readonly EvidenceSelector[]): Promise<SelectorLinkCapture> {
     return this.#observeSelectors(request, selectors, 'evidence.selectors.capture_checked', captureSelectorLinks);

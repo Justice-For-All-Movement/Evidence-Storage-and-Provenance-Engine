@@ -103,7 +103,7 @@
         "Owning locked compact selector/family captures for future source-backed Knowledge link writes"
       ],
       "acceptanceCriteria": "Real PGlite migration/restricted login and encrypted temporary objects exercise facade acquisition, scan/read isolation, stale/failing attempts, atomic idempotency and safe orphan cleanup. Synthetic scanner only in tests; real scanner and live acceptance separate.",
-      "implementationStatus": "partial authenticated facade/selector capture; accepted PR6/Knowledge13-15 integrations retained. PR7 exact authenticated human kind/ID before SQL and after owning project lock/current directory reload:73 local tests/typecheck/build/registry pass. Source7a147710 CI41910098423/check126855064534 passed73 ordinary plus31 installed compiled public-export service groups, strict declaration compilation/module-byte comparison/normal prepare-install; zero failures/skips and raw logs inspected. Three new groups exercise shared-ID service-agent denial/current post-lock revocation/scope-purpose/hash/input capture/lost read COMMIT uncertainty. Local runner unavailable before local installed completion; only CI installed result claimed. Final documentation-head CI/rules required before merge. Explicit consumer SDK adoption/current Identity-Consent/proofing/delegation/byte-scanner/TCP/live remain separate.",
+      "implementationStatus": "partial authenticated facade/selector capture; accepted PR6/Knowledge13-15 integrations retained. PR7 exact authenticated human kind/ID before SQL and after owning project lock/current directory reload:73 local tests/typecheck/build/registry pass. Source7a147710 CI41910098423/check126855064534 passed73 ordinary plus31 installed compiled public-export service groups, strict declaration compilation/module-byte comparison/normal prepare-install; zero failures/skips and raw logs inspected. Three new groups exercise shared-ID service-agent denial/current post-lock revocation/scope-purpose/hash/input capture/lost read COMMIT uncertainty. Local runner unavailable before local installed completion; only CI installed result claimed. Final documentation-head CI/rules required before merge. Explicit consumer SDK adoption/current Identity-Consent/proofing/delegation/byte-scanner/TCP/live remain separate. Additive reviewSelectorsForHuman source checkpoint: two actual restricted-migration/encrypted-root groups and typecheck/build pass; full75/installed33/current-head CI pending. Reader consumer adoption and host/live qualification remain separate.",
       "validation": {
         "local": "passed: Node 24.22.1; strict typecheck; 58 tests (19 facade); ESM/declaration build; compiled facade export smoke; canonical registry",
         "ci": {
@@ -123,6 +123,10 @@
         "verification": "docs/human-selector-capture-verification.json",
         "status": "source73/local73 and CI installed31/declarations/byte-match qualified; final documentation-head checks required",
         "focusedGroups": 3
+      },
+      "humanSelectorReview": {
+        "docs": "docs/HUMAN_SELECTOR_REVIEW.md",
+        "status": "incomplete source checkpoint; two groups/typecheck/build pass; full75/installed33/current-head CI pending"
       }
     }
   ],
