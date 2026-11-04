@@ -393,3 +393,39 @@ test('lost human-bound capture acknowledgement remains unknown and a fresh human
  await assert.rejects(f.service.captureSelectorLinksForHuman(f.req('viewer'), [selector], 'viewer'), code('unauthenticated'));
  assert.equal((await scoped(f.db, f.ctx(), tx => tx.audits())).filter(x => x.type === 'evidence.selectors.capture_checked').length, 1);
 });
+
+test('human-bound selector review retains the owning response and denies another human, same-ID nonhuman and foreign scope', async t => {
+ const f = await setup(t), acquired = await f.service.acquire(f.req(), command());
+ await f.service.runNextScan(f.req('worker'));
+ const observed = await f.service.inspect(f.req(), acquired.ref);
+ const selector = {kind:'whole' as const,evidence:acquired.ref,sha256:observed.version.sha256};
+ const review = await f.service.reviewSelectorsForHuman(f.req('viewer'), [selector], 'viewer');
+ assert.deepEqual(review, await f.service.reviewSelectors(f.req('viewer'), [selector]));
+ const count = async () => (await scoped(f.db,f.ctx(),tx=>tx.audits())).filter(x=>x.type==='evidence.selectors.review_checked').length;
+ const before = await count();
+ await assert.rejects(f.service.reviewSelectorsForHuman(f.req('author'),[selector],'viewer'),code('principal_mismatch'));
+ const worker = f.identities.find(i=>i.actor.id==='worker')!;
+ Object.assign(worker.actor,{id:'viewer'});
+ await assert.rejects(f.service.reviewSelectorsForHuman(f.req('worker'),[selector],'viewer'),code('principal_mismatch'));
+ Object.assign(worker.actor,{kind:'agent'});
+ await assert.rejects(f.service.reviewSelectorsForHuman(f.req('worker'),[selector],'viewer'),code('principal_mismatch'));
+ await assert.rejects(f.service.reviewSelectorsForHuman(f.req('foreign'),[selector],'foreign'),code('scope_denied'));
+ for(const id of ['', 'x'.repeat(129)]) await assert.rejects(f.service.reviewSelectorsForHuman(f.req('viewer'),[selector],id));
+ assert.equal(await count(),before);
+});
+test('human-bound selector review reauthenticates after lock and preserves lost read acknowledgement uncertainty without cached authority', async t => {
+ const f = await setup(t), acquired = await f.service.acquire(f.req(),command());
+ await f.service.runNextScan(f.req('worker'));
+ const observed = await f.service.inspect(f.req(),acquired.ref);
+ const selector = {kind:'whole' as const,evidence:acquired.ref,sha256:observed.version.sha256};
+ const lost:Database={close:async()=>{},transaction:async fn=>{await f.db.transaction(fn);throw Error('lost human review COMMIT acknowledgement');}};
+ const service=new EvidenceService({database:lost,objects:f.objects,identities:async()=>f.identities,now:()=>f.ctx().now,
+  scanner:{version:'unused-fixture',scan:async()=>{throw Error('must not scan');}}});
+ await assert.rejects(service.reviewSelectorsForHuman(f.req('viewer'),[selector],'viewer'),/lost human review COMMIT/);
+ const count=async()=>(await scoped(f.db,f.ctx(),tx=>tx.audits())).filter(x=>x.type==='evidence.selectors.review_checked').length;
+ assert.equal(await count(),1);
+ f.failOnce(sql=>{if(sql.includes('FROM public.evidence_project')&&sql.includes('FOR UPDATE')) f.identities.find(i=>i.actor.id==='viewer')!.disabled=true;return false;});
+ await assert.rejects(f.service.reviewSelectorsForHuman(f.req('viewer'),[selector],'viewer'),code('unauthenticated'));
+ assert.equal(await count(),1);
+ assert.ok(verifyAudit(await scoped(f.db,f.ctx(),tx=>tx.audits())));
+});

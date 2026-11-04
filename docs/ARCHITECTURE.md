@@ -23,3 +23,5 @@ Next coordinated work: Identity-gated service boundary; durable metadata and obj
 SELECTOR_LINK_CAPTURE.md documents the additive owning selector/link metadata capture with compact selected family basis. Existing reviewSelectors stays unchanged; current Knowledge link writes and source/consent/deployment acceptance remain separate.
 
 HUMAN_SELECTOR_CAPTURE.md documents opt-in exact authenticated human credential matching on owning selector capture; expected IDs are comparison targets, not authentication or current Consent/use permission.
+
+HUMAN_SELECTOR_REVIEW.md documents the opt-in expected-human counterpart to owning selector review. Downstream protected reader adoption remains separate.
