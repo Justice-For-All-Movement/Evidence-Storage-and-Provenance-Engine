@@ -352,6 +352,8 @@ type Loaded = { status: 'matched'; bytes: Buffer } | { status: 'missing' | 'mism
 type IngestInput = {
   bytes: Uint8Array; mediaType: string; filename: string; origin: Json; compartment: string | null; idempotencyKey: string | undefined;
   mode: 'original' | 'version' | 'derivative'; into?: string; parent?: VRow; relation?: string; tool?: Json; cause: string; extraEvent?: { type: string; payload: Json };
+  /** Replaces `tool` in the idempotency digest when the tool record carries call-time values (timestamps). */
+  toolDigestInput?: Json;
 };
 
 export function createEngine(deps: EvidenceDeps): EvidenceEngine {
@@ -487,7 +489,7 @@ export function createEngine(deps: EvidenceDeps): EvidenceEngine {
     await objects.put(objectKey, sealed.stored);
     let out: { ref: string; objectKey: string };
     try {
-      out = await sql.tx((tx) => idempotent(tx, SCHEMA, ctx, input.idempotencyKey, { op: input.mode, sha256, mediaType: input.mediaType, filename: input.filename, origin: input.origin, compartment: input.compartment, into: input.into ?? null, parent: input.parent === undefined ? null : versionRef(input.parent.evidence_id, input.parent.revision), relation: input.relation ?? null, tool: input.tool ?? null }, async () => {
+      out = await sql.tx((tx) => idempotent(tx, SCHEMA, ctx, input.idempotencyKey, { op: input.mode, sha256, mediaType: input.mediaType, filename: input.filename, origin: input.origin, compartment: input.compartment, into: input.into ?? null, parent: input.parent === undefined ? null : versionRef(input.parent.evidence_id, input.parent.revision), relation: input.relation ?? null, tool: input.toolDigestInput ?? input.tool ?? null }, async () => {
         const acquisition = async (evidenceId: string, revision: number): Promise<void> => {
           await tx.query(`insert into ${S}.acquisitions (id, tenant_id, project_id, evidence_id, revision, origin_kind, origin, original_owner, handling_history, gaps, actor_id, at) values ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9::jsonb,$10::jsonb,$11,$12)`,
             [randomUUID(), ctx.tenantId, ctx.projectId, evidenceId, revision, input.mode === 'derivative' ? 'derivative' : analysis.kind, JSON.stringify(input.origin ?? null), analysis.originalOwner, JSON.stringify(analysis.handlingHistory), JSON.stringify(input.mode === 'derivative' ? [] : analysis.gaps), ctx.actor.id, now]);
@@ -869,7 +871,7 @@ export function createEngine(deps: EvidenceDeps): EvidenceEngine {
         out = { bytes: new Uint8Array(Buffer.from(redactText(decodeText(bytes), ranges), 'utf8')), mediaType: source.media_type, filename: `${stem}.redacted.txt`, method: { method: 'text_offsets_replaced', ranges: json(ranges), offsetUnit: 'UTF-16 code units of the UTF-8 decoded text', replacement: 'U+2588 per code unit (offsets preserved)' } };
       } else throw new DomainError('unsupported_media_type', `Redaction is not supported for ${type}`);
       const manifestJson: Json = { schema: 'evidence.redaction/1', source: sourceRef, sourceSha256: source.sha256, reason, redactedBy: ctx.actor.id, at: iso(ctx.now), outputSha256: sha256Hex(out.bytes), ...(out.method as Record<string, Json>), note: 'The original is preserved unchanged. The removed content is absent from the derivative, not covered by an overlay.' };
-      const derivative = await ingest(ctx, { bytes: out.bytes, mediaType: out.mediaType, filename: out.filename, origin: { kind: 'derivative', parent: sourceRef, relation: 'redacted' }, compartment, idempotencyKey: input.idempotencyKey, mode: 'derivative', parent: source, relation: 'redacted', tool: manifestJson, cause: 'derivative', extraEvent: { type: 'evidence.redaction_created', payload: { source: sourceRef, outputSha256: sha256Hex(out.bytes), compartment } } });
+      const derivative = await ingest(ctx, { bytes: out.bytes, mediaType: out.mediaType, filename: out.filename, origin: { kind: 'derivative', parent: sourceRef, relation: 'redacted' }, compartment, idempotencyKey: input.idempotencyKey, mode: 'derivative', parent: source, relation: 'redacted', tool: manifestJson, toolDigestInput: { reason, method: out.method }, cause: 'derivative', extraEvent: { type: 'evidence.redaction_created', payload: { source: sourceRef, outputSha256: sha256Hex(out.bytes), compartment } } });
       return { derivative, manifest: manifestJson };
     },
 
