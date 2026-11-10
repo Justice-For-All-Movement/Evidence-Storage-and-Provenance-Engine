@@ -51,3 +51,20 @@ The facade derives actor/scope from authentication, authorizes commands and uses
 - Live acceptance: not performed. No real malware scanner, external infrastructure or HTTP application was created; a production scanner is a mandatory deployment port with no clean shortcut.
 
 See [service contract, roles and failure protocols](docs/SERVICE_CONTRACT.md) and [SQL review](docs/SQL_REVIEW.md). The Database and object adapter remain trusted infrastructure; application callers receive only this typed facade. Next coordinated work: real scanner and managed Identity adapters, production PostgreSQL concurrency/worker acceptance, externally anchored audit, storage retention/key lifecycle and live end-to-end acceptance.
+
+## Service layer
+
+The engine service (convention v1) lives in `src/engine/` and is documented in [docs/ENGINE_API.md](docs/ENGINE_API.md):
+evidence items with immutable versions, acquisition records with explicit provenance gaps, quarantine and scanning,
+hash-chained custody, citations bound to exact versions, integrity verification against the stored bytes, retention and
+disposal with tombstones, encrypted storage with key rotation, a source viewer, redacted derivatives and exportable
+provenance packages. A SHA-256 digest shows byte consistency only, never authenticity or truth.
+
+- Run: `DATABASE_URL=… IDENTITY_PUBLIC_KEYS='{"kid":"<PEM>"}' EVIDENCE_MASTER_KEY=<base64 32 bytes> OBJECT_STORE_PATH=./data npm run serve`
+  (add `CLAMAV_DATABASE_DIR=…` to release scanned content; without a scanner, versions stay quarantined).
+- Test: `TEST_DATABASE_URL=postgresql://user:pass@127.0.0.1:5432/postgres npm run check` (needs clamscan, poppler,
+  ImageMagick, exiftool, ffmpeg, pg_dump/psql, unzip; engine tests are skipped visibly without `TEST_DATABASE_URL`).
+- Use: `import { createEngine, migrate, routes } from '@accountability/evidence/engine'`; the engine object satisfies the
+  kit `EvidencePort`.
+
+The sections above describe the earlier foundation work and are kept as a historical record.
