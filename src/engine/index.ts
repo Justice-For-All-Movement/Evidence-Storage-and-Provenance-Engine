@@ -329,7 +329,8 @@ export interface EvidenceEngine extends StandardEngine, EvidencePort {
   resolveCitation(ctx: ServiceContext, citation: string): Promise<CitationResolution>;
   renderView(ctx: ServiceContext, ref: string, options?: { page?: number; timeMs?: number; range?: { start: number; end?: number }; dpi?: number; citation?: string; selector?: Selector }): Promise<ViewData>;
   redact(ctx: ServiceContext, ref: string, input: { regions?: readonly (PageRegion | (Box & { page?: number }))[]; textRanges?: readonly TextRange[]; reason: string; compartment?: string | null; dpi?: number; idempotencyKey?: string }): Promise<{ derivative: EvidenceVersionInfo; manifest: Json }>;
-  setRetention(ctx: ServiceContext, ref: string, input: { action: 'hold' | 'release_hold' | 'schedule' | 'clear_schedule'; reason: string; disposeAfter?: string; authorization: Authorization; idempotencyKey?: string }): Promise<VersionDetail>;
+  /** `execute: true` (schedule only; needs `evidence:admin`) makes the worker carry out the disposal when it falls due. */
+  setRetention(ctx: ServiceContext, ref: string, input: { action: 'hold' | 'release_hold' | 'schedule' | 'clear_schedule'; reason: string; disposeAfter?: string; execute?: boolean; authorization: Authorization; idempotencyKey?: string }): Promise<VersionDetail>;
   dueForDisposal(ctx: ServiceContext, options?: { at?: string }): Promise<VersionDetail[]>;
   dispose(ctx: ServiceContext, ref: string, input: { reason: string; authorization: Authorization; idempotencyKey?: string }): Promise<VersionDetail[]>;
   verifyIntegrity(ctx: ServiceContext, ref: string): Promise<IntegrityResult>;
@@ -561,6 +562,62 @@ export function createEngine(deps: EvidenceDeps): EvidenceEngine {
   }
 
   // ── jobs ──
+  async function disposeImpl(ctx: ServiceContext, ref: string, input: { reason: string; authorization: Authorization; idempotencyKey?: string }): Promise<VersionDetail[]> {
+    invariant(isObject(input), 'invalid_input', 'Disposal input required');
+    const reason = text(input.reason, 'reason'); const authorization = validAuthorization(input.authorization);
+    requireCapability(ctx, 'evidence:admin');
+    const v = await need(sql, ctx, ref);
+    await recheck(ctx, 'evidence:admin', versionRef(v.evidence_id, v.revision));
+    const pinned = parseRef(ref)?.revision !== undefined;
+    const keys = await sql.tx((tx) => idempotent(tx, SCHEMA, ctx, input.idempotencyKey, { op: 'dispose', ref, reason, authorization }, async () => {
+      const ev = (await tx.query<{ hold: boolean }>(`select hold from ${S}.evidence where id=$1 for update`, [v.evidence_id]))[0] as { hold: boolean };
+      if (ev.hold) throw new DomainError('invalid_state', 'A retention hold is active; disposal is refused');
+      const targets = await tx.query<{ revision: number; object_key: string; sha256: string; bytes_state: string }>(`select revision, object_key, sha256, bytes_state from ${S}.versions where evidence_id=$1 and ($2::int is null or revision=$2) order by revision`, [v.evidence_id, pinned ? v.revision : null]);
+      const out: string[] = [];
+      for (const t of targets) {
+        out.push(t.object_key);
+        if (t.bytes_state === 'disposed') continue;
+        await tx.query(`update ${S}.versions set bytes_state='disposed', wrapped_key=null, dedupe_key=null where evidence_id=$1 and revision=$2`, [v.evidence_id, t.revision]);
+        await tx.query(`insert into ${S}.retention_decisions (id, tenant_id, project_id, evidence_id, revision, action, reason, dispose_after, authorization_record, actor_id, at) values ($1,$2,$3,$4,$5,'disposal',$6,null,$7::jsonb,$8,$9)`, [randomUUID(), ctx.tenantId, ctx.projectId, v.evidence_id, t.revision, reason, JSON.stringify(authorization), ctx.actor.id, iso(ctx.now)]);
+        await custody(tx, ctx, v.evidence_id, t.revision, 'disposed', { reason, authorization, tombstoneSha256: t.sha256 });
+        await emitEvent(tx, SCHEMA, ctx, 'evidence.retention_changed', versionRef(v.evidence_id, t.revision), { evidence: evidenceRef(v.evidence_id), action: 'disposal', tombstoneSha256: t.sha256 });
+      }
+      return out;
+    }));
+    // Bytes are removed after the decision is durable. A failed delete is retried by calling dispose again and is
+    // reported by verifyAll as `disposed_bytes_present`.
+    for (const key of keys) await objects.delete(key);
+    return (await sql.query<VRow>(`${VSEL} where v.evidence_id=$1 and v.tenant_id=$2 and v.project_id=$3 and ($4::int is null or v.revision=$4) order by v.revision`, [v.evidence_id, ctx.tenantId, ctx.projectId, pinned ? v.revision : null])).map(detailOf);
+  }
+
+  /**
+   * Executes a disposal scheduled with `execute: true` once it falls due. The job carries the scheduling context, so the
+   * scheduler must have held `evidence:admin`; the AuthorizationPort is asked again now. A hold, a cleared or changed
+   * schedule, or a refused authorization means nothing is deleted.
+   */
+  async function scheduledDisposalJob(job: Job): Promise<Json> {
+    const ctx: ServiceContext = { ...job.ctx, now: new Date().toISOString() };
+    const p = job.payload as { evidenceId: string; disposeAfter: string };
+    const ref = versionRef(p.evidenceId);
+    const row = (await sql.query<{ hold: boolean; retention: Record<string, Json> }>(`select hold, retention from ${S}.evidence where id=$1 and tenant_id=$2 and project_id=$3`, [p.evidenceId, ctx.tenantId, ctx.projectId]))[0];
+    const schedule = row?.retention.schedule as { disposeAfter?: string; reason?: string; authorization?: Authorization; execute?: boolean } | undefined;
+    const skip = async (reason: string): Promise<Json> => {
+      await sql.tx((tx) => appendAudit(tx, SCHEMA, ctx, 'evidence.scheduled_disposal_skipped', ref, { reason, disposeAfter: p.disposeAfter }));
+      return { ref, disposed: false, reason };
+    };
+    if (row === undefined) return { ref, disposed: false, reason: 'not_found' };
+    if (schedule === undefined || schedule.execute !== true || schedule.disposeAfter !== p.disposeAfter) return skip('schedule_changed');
+    if (row.hold) return skip('hold');
+    if (Date.parse(p.disposeAfter) > Date.parse(ctx.now)) throw new DomainError('invalid_state', 'Scheduled disposal is not yet due');
+    try {
+      const out = await disposeImpl(ctx, ref, { reason: `Scheduled disposal: ${schedule.reason ?? ''}`.slice(0, 2000), authorization: schedule.authorization as Authorization, idempotencyKey: `scheduled-disposal:${p.evidenceId}@${p.disposeAfter}` });
+      return { ref, disposed: true, revisions: out.map((d) => d.revision) };
+    } catch (error) {
+      if (error instanceof DomainError && error.code === 'forbidden') return skip('authorization_refused');
+      if (error instanceof DomainError && error.code === 'invalid_state') return skip('hold');
+      throw error;
+    }
+  }
   async function scanJob(job: Job): Promise<Json> {
     const ctx: ServiceContext = { ...job.ctx, now: new Date().toISOString() };
     await recheck(ctx, 'evidence:write');
@@ -881,19 +938,30 @@ export function createEngine(deps: EvidenceDeps): EvidenceEngine {
       invariant(isObject(input) && ['hold', 'release_hold', 'schedule', 'clear_schedule'].includes(input.action), 'invalid_input', 'Unsupported retention action');
       const reason = text(input.reason, 'reason'); const authorization = validAuthorization(input.authorization);
       const disposeAfter = input.action === 'schedule' ? (() => { invariant(typeof input.disposeAfter === 'string' && Number.isFinite(Date.parse(input.disposeAfter)), 'invalid_input', 'disposeAfter timestamp required'); return iso(input.disposeAfter); })() : null;
+      invariant(input.execute === undefined || typeof input.execute === 'boolean', 'invalid_input', 'execute must be a boolean');
+      invariant(input.execute !== true || input.action === 'schedule', 'invalid_input', 'execute applies only to a schedule');
+      const execute = input.execute === true;
       const v = await need(sql, ctx, ref);
-      await sql.tx((tx) => idempotent(tx, SCHEMA, ctx, input.idempotencyKey, { op: 'retention', ref, action: input.action, reason, disposeAfter, authorization }, async () => {
+      // Automatic execution deletes bytes later without a further call, so it needs the disposal capability now.
+      if (execute) await recheck(ctx, 'evidence:admin', versionRef(v.evidence_id));
+      await sql.tx((tx) => idempotent(tx, SCHEMA, ctx, input.idempotencyKey, { op: 'retention', ref, action: input.action, reason, disposeAfter, authorization, ...(execute ? { execute } : {}) }, async () => {
         const cur = (await tx.query<{ hold: boolean; retention: Record<string, Json> }>(`select hold, retention from ${S}.evidence where id=$1 for update`, [v.evidence_id]))[0] as { hold: boolean; retention: Record<string, Json> };
         const retention: Record<string, Json> = { ...cur.retention };
         let hold = cur.hold;
         if (input.action === 'hold') { hold = true; retention.hold = { reason, since: iso(ctx.now), authorization }; }
         if (input.action === 'release_hold') { invariant(cur.hold, 'invalid_state', 'No hold is active'); hold = false; delete retention.hold; }
-        if (input.action === 'schedule') retention.schedule = { disposeAfter, reason, authorization };
+        if (input.action === 'schedule') retention.schedule = { disposeAfter, reason, authorization, ...(execute ? { execute: true, scheduledBy: ctx.actor.id } : {}) };
+        const sched = retention.schedule as { disposeAfter?: string; execute?: boolean } | undefined;
+        // Enqueue on an executable schedule, and again when a hold that blocked it is released.
+        if (sched?.execute === true && typeof sched.disposeAfter === 'string' && !hold && (input.action === 'schedule' || input.action === 'release_hold')) {
+          const due = new Date(Math.max(Date.parse(sched.disposeAfter), Date.parse(ctx.now)));
+          await enqueueJob(tx, SCHEMA, ctx, { kind: 'evidence.scheduled_disposal', payload: { evidenceId: v.evidence_id, disposeAfter: sched.disposeAfter }, dedupeKey: `${v.evidence_id}@${sched.disposeAfter}#${randomUUID()}`, runAt: due, maxAttempts: 5 });
+        }
         if (input.action === 'clear_schedule') delete retention.schedule;
         await tx.query(`update ${S}.evidence set hold=$2, retention=$3::jsonb where id=$1`, [v.evidence_id, hold, JSON.stringify(retention)]);
         await tx.query(`insert into ${S}.retention_decisions (id, tenant_id, project_id, evidence_id, revision, action, reason, dispose_after, authorization_record, actor_id, at) values ($1,$2,$3,$4,null,$5,$6,$7,$8::jsonb,$9,$10)`, [randomUUID(), ctx.tenantId, ctx.projectId, v.evidence_id, input.action, reason, disposeAfter, JSON.stringify(authorization), ctx.actor.id, iso(ctx.now)]);
-        await custody(tx, ctx, v.evidence_id, null, `retention_${input.action}`, { reason, authorization, ...(disposeAfter === null ? {} : { disposeAfter }) });
-        await emitEvent(tx, SCHEMA, ctx, 'evidence.retention_changed', versionRef(v.evidence_id), { evidence: evidenceRef(v.evidence_id), action: input.action, hold, ...(disposeAfter === null ? {} : { disposeAfter }) });
+        await custody(tx, ctx, v.evidence_id, null, `retention_${input.action}`, { reason, authorization, ...(disposeAfter === null ? {} : { disposeAfter }), ...(execute ? { execute } : {}) });
+        await emitEvent(tx, SCHEMA, ctx, 'evidence.retention_changed', versionRef(v.evidence_id), { evidence: evidenceRef(v.evidence_id), action: input.action, hold, ...(disposeAfter === null ? {} : { disposeAfter }), ...(execute ? { execute } : {}) });
         return { ok: true };
       }));
       return detailOf(await need(sql, ctx, ref));
@@ -903,33 +971,7 @@ export function createEngine(deps: EvidenceDeps): EvidenceEngine {
       const at = iso(options.at ?? ctx.now);
       return (await sql.query<VRow>(`${VSEL} where v.tenant_id=$1 and v.project_id=$2 and e.hold=false and v.bytes_state <> 'disposed' and (e.retention->'schedule'->>'disposeAfter')::timestamptz <= $3 and (e.compartment is null or e.compartment = any($4)) order by e.created_at, v.revision`, [ctx.tenantId, ctx.projectId, at, [...ctx.compartments]])).map(detailOf);
     },
-    async dispose(ctx, ref, input) {
-      invariant(isObject(input), 'invalid_input', 'Disposal input required');
-      const reason = text(input.reason, 'reason'); const authorization = validAuthorization(input.authorization);
-      requireCapability(ctx, 'evidence:admin');
-      const v = await need(sql, ctx, ref);
-      await recheck(ctx, 'evidence:admin', versionRef(v.evidence_id, v.revision));
-      const pinned = parseRef(ref)?.revision !== undefined;
-      const keys = await sql.tx((tx) => idempotent(tx, SCHEMA, ctx, input.idempotencyKey, { op: 'dispose', ref, reason, authorization }, async () => {
-        const ev = (await tx.query<{ hold: boolean }>(`select hold from ${S}.evidence where id=$1 for update`, [v.evidence_id]))[0] as { hold: boolean };
-        if (ev.hold) throw new DomainError('invalid_state', 'A retention hold is active; disposal is refused');
-        const targets = await tx.query<{ revision: number; object_key: string; sha256: string; bytes_state: string }>(`select revision, object_key, sha256, bytes_state from ${S}.versions where evidence_id=$1 and ($2::int is null or revision=$2) order by revision`, [v.evidence_id, pinned ? v.revision : null]);
-        const out: string[] = [];
-        for (const t of targets) {
-          out.push(t.object_key);
-          if (t.bytes_state === 'disposed') continue;
-          await tx.query(`update ${S}.versions set bytes_state='disposed', wrapped_key=null, dedupe_key=null where evidence_id=$1 and revision=$2`, [v.evidence_id, t.revision]);
-          await tx.query(`insert into ${S}.retention_decisions (id, tenant_id, project_id, evidence_id, revision, action, reason, dispose_after, authorization_record, actor_id, at) values ($1,$2,$3,$4,$5,'disposal',$6,null,$7::jsonb,$8,$9)`, [randomUUID(), ctx.tenantId, ctx.projectId, v.evidence_id, t.revision, reason, JSON.stringify(authorization), ctx.actor.id, iso(ctx.now)]);
-          await custody(tx, ctx, v.evidence_id, t.revision, 'disposed', { reason, authorization, tombstoneSha256: t.sha256 });
-          await emitEvent(tx, SCHEMA, ctx, 'evidence.retention_changed', versionRef(v.evidence_id, t.revision), { evidence: evidenceRef(v.evidence_id), action: 'disposal', tombstoneSha256: t.sha256 });
-        }
-        return out;
-      }));
-      // Bytes are removed after the decision is durable. A failed delete is retried by calling dispose again and is
-      // reported by verifyAll as `disposed_bytes_present`.
-      for (const key of keys) await objects.delete(key);
-      return (await sql.query<VRow>(`${VSEL} where v.evidence_id=$1 and v.tenant_id=$2 and v.project_id=$3 and ($4::int is null or v.revision=$4) order by v.revision`, [v.evidence_id, ctx.tenantId, ctx.projectId, pinned ? v.revision : null])).map(detailOf);
-    },
+    async dispose(ctx, ref, input) { return disposeImpl(ctx, ref, input); },
 
     // ── integrity ──
     async verifyIntegrity(ctx, ref) {
@@ -1077,7 +1119,7 @@ export function createEngine(deps: EvidenceDeps): EvidenceEngine {
     async job(ctx, id) { requireCapability(ctx, 'evidence:read'); return UUID.test(String(id)) ? getJob(sql, SCHEMA, ctx, id) : null; },
     async jobs(ctx, options = {}) { requireCapability(ctx, 'evidence:read'); return listJobs(sql, SCHEMA, ctx, options); },
     async controlJob(ctx, id, action) { requireCapability(ctx, 'evidence:admin'); if (!UUID.test(String(id))) throw new DomainError('not_found', 'Not found'); return controlJob(sql, SCHEMA, ctx, id, action); },
-    runJobsOnce(options = {}) { return runJobsOnce(sql, SCHEMA, { 'evidence.scan': scanJob, 'evidence.integrity_batch': integrityJob }, { worker: options.worker ?? worker, limit: options.limit ?? 10, ...(options.leaseMs === undefined ? {} : { leaseMs: options.leaseMs }) }); },
+    runJobsOnce(options = {}) { return runJobsOnce(sql, SCHEMA, { 'evidence.scan': scanJob, 'evidence.integrity_batch': integrityJob, 'evidence.scheduled_disposal': scheduledDisposalJob }, { worker: options.worker ?? worker, limit: options.limit ?? 10, ...(options.leaseMs === undefined ? {} : { leaseMs: options.leaseMs }) }); },
 
     // ── StandardEngine ──
     async inspect(ctx, ref) {
