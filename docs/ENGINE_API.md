@@ -76,7 +76,7 @@ createCitation(ctx, { version, selector, note?, idempotencyKey? }): Promise<Cita
 resolveCitation(ctx, citationRefOrId): Promise<CitationResolution>                                  // [evidence:read]
 renderView(ctx, ref, { page?, timeMs?, range?: {start, end?}, dpi?, citation?, selector? }?): Promise<ViewData> // [evidence:read]
 redact(ctx, ref, { regions?, textRanges?, reason, compartment?, dpi?, idempotencyKey? }): Promise<{ derivative: EvidenceVersionInfo; manifest: Json }> // [evidence:redact]
-setRetention(ctx, ref, { action: 'hold'|'release_hold'|'schedule'|'clear_schedule', reason, disposeAfter?, authorization, idempotencyKey? }): Promise<VersionDetail> // [evidence:retain]
+setRetention(ctx, ref, { action: 'hold'|'release_hold'|'schedule'|'clear_schedule', reason, disposeAfter?, execute?, authorization, idempotencyKey? }): Promise<VersionDetail> // [evidence:retain]; execute also [evidence:admin]
 dueForDisposal(ctx, { at? }?): Promise<VersionDetail[]>                                             // [evidence:retain]
 dispose(ctx, ref, { reason, authorization, idempotencyKey? }): Promise<VersionDetail[]>             // [evidence:admin] + AuthorizationPort
 verifyIntegrity(ctx, ref): Promise<IntegrityResult>                                                 // [evidence:verify]
@@ -149,8 +149,14 @@ applyUpstreamChange [evidence:upstream] · health()
   whose `tool` is the redaction manifest; `evidence.redaction_created` is emitted; the original is unchanged.
   `compartment` places the derivative in another compartment; a caller holding only that compartment sees the
   derivative, and its source is reported as hidden (`source_not_visible`) without id or digest.
-- **Retention.** `hold` blocks disposal. `schedule` records a date; disposal is never automatic — `dueForDisposal`
-  lists candidates and `dispose` executes with a recorded authorization. Disposal deletes the object and the wrapped
+- **Retention.** `hold` blocks disposal. `schedule` records a date. Without `execute`, disposal is never automatic —
+  `dueForDisposal` lists candidates and `dispose` executes with a recorded authorization. With `execute: true` (schedule
+  only; the caller must hold `evidence:admin`, re-checked through the `AuthorizationPort`) a job
+  `evidence.scheduled_disposal` runs when the date passes and performs the same disposal with the schedule's recorded
+  reason and authorization, under the scheduling context. Before deleting, it requires the schedule to be unchanged and no
+  hold active, and asks the `AuthorizationPort` again; otherwise it deletes nothing and audits
+  `evidence.scheduled_disposal_skipped` (`hold`, `schedule_changed`, `authorization_refused`). Releasing a hold re-enqueues an
+  executable schedule. Disposal deletes the object and the wrapped
   data key, keeps the row as a tombstone with its digest, and the gap `bytes_disposed` stays visible everywhere.
 - **Integrity.** `verifyIntegrity` and `verifyAll` read the actual object bytes from the `ObjectStore`. Results:
   `matched`, `mismatch`, `missing`, `disposed`, `disposed_bytes_present`, `key_unavailable`. A transition to
@@ -246,8 +252,9 @@ Not implemented / not verified:
 - Redaction: PDF, PNG/JPEG/GIF/WebP (first frame only) and text. Audio/video redaction, office formats and
   redaction of selected PDF pages while keeping others as vector text are not implemented (all pages are rasterised).
 - Viewer: no thumbnails/waveforms/transcoding; video is served as byte ranges of the original container.
-- Scheduled disposal is not executed automatically. Authorization records for disposal are stored, not verified
-  against another engine (the `AuthorizationPort` is consulted when supplied).
+- Scheduled disposal runs automatically only for schedules set with `execute: true`; others are listed, not executed.
+  Authorization records for disposal are stored, not verified against another engine (the `AuthorizationPort` is
+  consulted when supplied, including at execution time).
 - Packages are unsigned. `events()` is a tenant-wide feed for the orchestrator (all projects of the tenant).
 - Audit records for compartment-hidden evidence are filtered from `audit()`; custody entries of a derivative name its
   source by opaque reference inside hash-covered detail (the source's digest and content are never included).
