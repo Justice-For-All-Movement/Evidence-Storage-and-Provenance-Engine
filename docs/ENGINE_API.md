@@ -219,6 +219,10 @@ Standard: `GET /healthz`, `/v1/manifest`, `/v1/inspect?ref=`, `/v1/search?q=`, `
 
 An object written after the dump shows as an orphan; a version recorded after the object copy shows as `missing`.
 
+Use `pg_dump`/`psql` of the same major version as the target server. A newer `pg_dump` writes settings an older
+server does not know (PostgreSQL 17+ emits `SET transaction_timeout`), so its dump fails to restore into
+PostgreSQL 16 under `ON_ERROR_STOP`. CI pins `ubuntu-24.04` and `postgresql-client-16` for this reason.
+
 ## Tool dependencies
 
 `clamscan` (scanner, optional), `pdftoppm`, `pdftotext`, `pdfinfo` (PDF view, citation checks, redaction),

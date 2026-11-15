@@ -4,7 +4,9 @@ permissions:
   contents: read
 jobs:
   check:
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest moved to 26.04, which has no postgresql-client-16. A newer pg_dump writes settings
+    # (e.g. transaction_timeout) that the PostgreSQL 16 service rejects on restore, failing the backup/restore test.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     services:
       postgres:
@@ -28,6 +30,10 @@ jobs:
       - name: Install the tools the evidence engine drives (scanner, PDF, image, media, PostgreSQL client)
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends clamav poppler-utils imagemagick libimage-exiftool-perl ffmpeg unzip postgresql-client-16 || sudo apt-get install -y --no-install-recommends clamav poppler-utils imagemagick libimage-exiftool-perl ffmpeg unzip postgresql-client
+          sudo apt-get install -y --no-install-recommends clamav poppler-utils imagemagick libimage-exiftool-perl ffmpeg unzip postgresql-client-16
+      - name: The PostgreSQL client must match the server major version (16) for dump/restore
+        run: |
+          pg_dump --version
+          pg_dump --version | grep -E '\) 16\.'
       - run: npm ci
       - run: npm run check
